@@ -15,6 +15,7 @@ int addinc = 0;
 uint8_t data[1] = {0};
 uint8_t clearscreen[2] = {0x40,0xA0};
 uint8_t resetscreen[2] = {0x00,0x02};
+uint8_t keydata[1] = {};
 int count; 
 int counter;
 
@@ -118,7 +119,7 @@ void task2 (void) {
 	while(count!=10000000){count+=1;}
 	// Clears the screen
 	I2CScreenClear();
-	// Writes Hello Worls
+	// Writes Hello World
 	uint8_t writehello[6] = {0x40, 0xC8, 0x65, 0x6c, 0x6c, 0x6f};
 	I2CSend(writehello, 6);	
 	uint8_t writenewline[2] = {0x00, 0xc0};
@@ -128,8 +129,20 @@ void task2 (void) {
 	
 }
 
+void task3 (void) {
+	addinc = 0x38;
+	TransferCfg.tx_data = NULL;
+	TransferCfg.tx_length = 0;
+	TransferCfg.rx_data = keydata;
+	TransferCfg.rx_length = 1;
+	I2C_MasterTransferData(LPC_I2C1, &TransferCfg, I2C_TRANSFER_POLLING);
+	sprintf(currentstatus, "%u recieved\n\r", *keydata);	
+	write_usb_serial_blocking(currentstatus, 15);
+}
+
 int main (void) {
 	task1();
 	task2();
+	task3();
 	return 0;
 }
