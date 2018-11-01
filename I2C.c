@@ -17,7 +17,7 @@ int addinc = 0;
 uint8_t data[1] = {0};
 uint8_t clearscreen[2] = {0x40,0xA0};
 uint8_t resetscreen[2] = {0x00,0x02};
-uint8_t keydata[1] = {};
+uint8_t keydata = 5;
 int count; 
 int counter;
 uint8_t setHigh[1] = {0x0F};
@@ -115,11 +115,11 @@ void I2CSend (uint8_t* inputdata, uint32_t inputsize) {
 	I2C_MasterTransferData(LPC_I2C1, &TransferCfg, I2C_TRANSFER_POLLING);
 }
 
-void I2CRecieve (uint8_t* outputdata, int outputsize) {
+void I2CRecieve (uint8_t outputdata, int outputsize) {
 	TransferCfg.sl_addr7bit = addinc;
 	TransferCfg.tx_data = NULL;
 	TransferCfg.tx_length = 0;
-	TransferCfg.rx_data = outputdata;
+	TransferCfg.rx_data = &outputdata;
 	TransferCfg.rx_length = outputsize;
 	I2C_MasterTransferData(LPC_I2C1, &TransferCfg, I2C_TRANSFER_POLLING);
 }
@@ -161,16 +161,26 @@ void task3 (void) {
 	I2CSend(setHigh, 1);
 }
 
+void garbage(void) {
+	//I2CSend(setLow, 1);
+	sprintf(currentstatus, "%d key is being pressed\n\r", keydata);	
+	write_usb_serial_blocking(currentstatus, 34);	
+	//I2CRecieve(keydata,1);
+	sprintf(currentstatus, "%d key is being pressed\n\r", keydata);	
+	write_usb_serial_blocking(currentstatus, 34);
+}
+
 void EINT3_IRQHandler(void) {
+	I2CRecieve(keydata,1);
+	sprintf(currentstatus, "%d key is being pressed\n\r", keydata);	
+	write_usb_serial_blocking(currentstatus, 34);
+	//I2CSend(setLow, 1);
 	GPIO_SetDir(1,0x00B40000,1);
 	GPIO_SetValue(1,0x00B40000);
-	I2CSend(setLow, 1);
 	count = 0;
 	GPIO_ClearInt(0,0x00800000);
 	while(count!=1000000){count+=1;}
 	GPIO_ClearValue(1,0x00B40000);
-	count = 0;
-	//GPIO_ClearInt(0,0x00800000);
 }
 
 int main (void) {
