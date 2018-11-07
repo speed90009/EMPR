@@ -24,7 +24,6 @@ int counter;
 uint8_t setHigh[1] = {0x0F};
 uint8_t setLow[1] = {0xF0};
 int colNo = 0;
-uint8_t row[16] = {0xB1,0xB2,0xB3,0xC1,0xB4,0xB5,0xB6,0xC2,0xB7,0xB8,0xB9,0xC3,0xAA,0xB0,0xA3,0xC4};
 uint8_t calc[16] = {0xB1,0xB2,0xB3,0xAB,0xB4,0xB5,0xB6,0xAD,0xB7,0xB8,0xB9,0xAA,0xA0,0xB0,0xBD,0xAF};
 int rpointer = -1;
 
@@ -44,25 +43,6 @@ void serial_init(void)
 	PinCfg.Pinnum = 1;
 	PINSEL_ConfigPin(&PinCfg);
 
-	//UART1
-	UART_CFG_Type UARTConfigStruct;
-	UART_FIFO_CFG_Type UARTFIFOConfigStruct;
-	PinCfg.Funcnum = 1;
-	PinCfg.OpenDrain = 0;
-	PinCfg.Pinmode = 0;
-
-	PinCfg.Portnum = 0;
-	PinCfg.Pinnum = 2;
-	PINSEL_ConfigPin(&PinCfg);
-	PinCfg.Pinnum = 3;
-	PINSEL_ConfigPin(&PinCfg);
-	
-	UART_ConfigStructInit(&UARTConfigStruct);
-	UART_FIFOConfigStructInit(&UARTFIFOConfigStruct);
-	UART_Init((LPC_UART_TypeDef *)LPC_UART0, &UARTConfigStruct);
-    	UART_FIFOConfig((LPC_UART_TypeDef *)LPC_UART0, &UARTFIFOConfigStruct);
-	UART_TxCmd((LPC_UART_TypeDef *)LPC_UART0, ENABLE);
-
 	//EINT3
 	PinCfg.Funcnum = 0;
 	PinCfg.Portnum = 0;
@@ -71,15 +51,7 @@ void serial_init(void)
 	GPIO_SetDir(0,0x00800000,0);
 	GPIO_IntCmd(0,0x00800000,1);
 }
-int read_usb_serial_none_blocking(char *buf,int length)
-{
-	return(UART_Receive((LPC_UART_TypeDef *)LPC_UART0, (uint8_t *)buf, length, NONE_BLOCKING));
-}
 
-int write_usb_serial_blocking(char *buf,int length)
-{
-	return(UART_Send((LPC_UART_TypeDef *)LPC_UART0,(uint8_t *)buf,length, BLOCKING));
-}
 
 unsigned int int_to_int(unsigned int k) {
     return (k == 0 || k == 1 ? k : ((k % 2) + 10 * int_to_int(k / 2)));
@@ -95,6 +67,7 @@ void I2CTypeSetup (void) {
 }
 
 void I2CScreenSetup (void) {
+	addinc = 0x3B;
 	uint8_t screendata[12] = {0x00,0x34,0x0c,0x06,0x35,0x04,0x10,0x42,0x9f,0x34,0x02,0x01};
 	TransferCfg.sl_addr7bit = addinc;
 	TransferCfg.tx_data = screendata;
@@ -133,47 +106,39 @@ void I2CScreenClear (void) {
 	I2CSend(setstartpos, 2);
 }
 
-void task1 (void) {
-	serial_init();
+void CalcInit (void) {
 	I2C_Init(LPC_I2C1, 100000);
-	I2C_Cmd(LPC_I2C1, ENABLE);	
-	for (addinc=0; addinc<128; addinc++) {	
-		I2CTypeSetup();
-		DataAttempt = I2C_MasterTransferData(LPC_I2C1, &TransferCfg, I2C_TRANSFER_POLLING);
-		if (DataAttempt == SUCCESS) {
-			no_devices += 1;
-		}
-	}
-	sprintf(currentstatus, "%d devices connected to i2c bus\n\r", no_devices);	
-	write_usb_serial_blocking(currentstatus, 32);
-}
-
-void task2 (void) {
-	addinc = 0x3B;
+	I2C_Cmd(LPC_I2C1, ENABLE);
 	// Initialise the Screen
 	I2CScreenSetup();
 	while(count!=10000000){count+=1;}
 	// Clears the screen
 	I2CScreenClear();
 	// Writes Hello World
-	uint8_t writehello[6] = {0x40, 0xC8, 0x65, 0x6c, 0x6c, 0x6f};
-	I2CSend(writehello, 6);	
-	uint8_t writenewline[2] = {0x00, 0xc0};
-	I2CSend(writenewline, 2);
-	uint8_t writeworld[6] = {0x40, 0xD7, 0x6f, 0x72, 0x6c, 0x64};
-	I2CSend(writeworld, 6);
-	
+	uint8_t writecalc[11] = {0x40, 0xC3, 0xC1, 0xCC, 0xC3, 0xD5, 0xCC, 0xC1, 0xD4, 0xCF, 0xD2};
+	I2CSend(writecalc, 11);
 }
 
 void task3 (void) {
+	count=0;while(count!=10000000){count+=1;}
+	I2CScreenClear();
 	addinc = 0x21;
 	I2CSend(setHigh, 1);
 }
 
 void writer (int pointer){
 	addinc = 0x3B;
-	uint8_t writechar[2] = {0x40, row[pointer]};
-	I2CSend(writechar, 2);
+	if (calc[pointer] == 0xA0) {
+		I2CScreenClear();
+	}
+	else {
+		uint8_t writechar[2] = {0x40, calc[pointer]};
+		I2CSend(writechar, 2);
+	}	
+	if (calc[pointer] == 0xBD) {
+		count=0;while(count!=1000000){count+=1;}
+		I2CScreenClear();
+	}
 }
 
 void RowCheck (uint8_t DataIn) {
@@ -237,7 +202,6 @@ int testfunc (void){
 	return 0;
 }
 void EINT3_IRQHandler(void) {
-	I2CScreenClear();
 	addinc = 0x21;
 	testfunc();
 
@@ -259,8 +223,8 @@ void task4 (void){
 }
 
 int main (void) {
-	task1();
-	task2();
+	serial_init();
+	CalcInit();
 	task3();
 	while(1) {
 	}
