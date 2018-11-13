@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "lpc17xx_i2c.h"
 #include "lpc17xx_pinsel.h"
 #include "lpc_types.h"
@@ -26,6 +27,14 @@ uint8_t setLow[1] = {0xF0};
 int colNo = 0;
 uint8_t calc[16] = {0xB1,0xB2,0xB3,0xAB,0xB4,0xB5,0xB6,0xAD,0xB7,0xB8,0xB9,0xAA,0xA0,0xB0,0xBD,0xAF};
 int rpointer = -1;
+char firstNo[14] = {};
+char secondNo[14] = {};
+uint8_t buffer = 0;
+char usedFunc = '0';
+int noPointer = 0;
+int i = 0;
+int result = 0;
+int resultlen = 0;
 
 void serial_init(void)
 {
@@ -57,6 +66,12 @@ unsigned int int_to_int(unsigned int k) {
     return (k == 0 || k == 1 ? k : ((k % 2) + 10 * int_to_int(k / 2)));
 }
 
+int get_int_len (int value){
+  int l=1;
+  while(value>=9){ l++; value/=10; }
+  return l;
+}
+
 void I2CTypeSetup (void) {
 	TransferCfg.sl_addr7bit = addinc;
 	TransferCfg.tx_data = data;
@@ -74,7 +89,6 @@ void I2CScreenSetup (void) {
 	TransferCfg.tx_length = 12;
 	I2C_MasterTransferData(LPC_I2C1, &TransferCfg, I2C_TRANSFER_POLLING);
 }
-
 void I2CSend (uint8_t* inputdata, uint32_t inputsize) {
 	TransferCfg.sl_addr7bit = addinc;
 	TransferCfg.tx_data = inputdata;
@@ -86,7 +100,7 @@ void I2CSend (uint8_t* inputdata, uint32_t inputsize) {
 }
 
 void I2CRecieve (uint8_t* outputdata, int outputsize) {
-	RecieveCfg.sl_addr7bit = 0x21;
+	RecieveCfg.sl_addr7bit = addinc;
 	RecieveCfg.tx_data = NULL;
 	RecieveCfg.tx_length = 0;
 	RecieveCfg.rx_data = outputdata;
@@ -125,6 +139,62 @@ void task3 (void) {
 	addinc = 0x21;
 	I2CSend(setHigh, 1);
 }
+/*
+void I2CScreenRead (void) {
+	uint8_t readdisp[4] = {0x00, 0x75, 0x48, 0x49};
+	I2CSend(readdisp, 4);
+	uint8_t datastore[32];
+	datastore[0] = 0x40;
+	datastore[1] = 0xB1;
+	I2CRecieve(datastore, 32);
+	I2CSend(datastore, 32);
+}
+*/
+
+void Writercheck (int pointer){
+	addinc = 0x3B;
+	buffer = calc[pointer] | 0x0F;
+	if (buffer == 0xAF){
+		noPointer = 0;
+		switch(calc[pointer]){
+			case 0xAA :
+				usedFunc = '*';
+			case 0xAB :
+				usedFunc = '+';
+			case 0xAD :
+				usedFunc = '-';
+			case 0xAF :
+				usedFunc = '/';
+		}
+	}
+	if ((buffer != 0xAF) & (calc[pointer] != 0xBD)){
+		if(usedFunc == '0'){
+			firstNo[noPointer] = calc[pointer];
+			noPointer++;
+		}
+		else{
+			secondNo[noPointer] = calc[pointer];
+			noPointer++;
+		}
+	}
+
+	if (calc[pointer] == 0xBD){
+		count=0;while(count!=5000000){count+=1;}
+		I2CScreenClear();
+		int firstInt = atoi(firstNo);
+		int secondInt = atoi(secondNo);
+		switch(usedFunc){
+			case '*' :
+				result = firstInt * secondInt;
+			case '+' :
+				result = firstInt + secondInt;
+			case '-' :
+				result = firstInt - secondInt;
+			case '/' :
+				result = firstInt / secondInt;
+		}
+	}
+}
 
 void writer (int pointer){
 	addinc = 0x3B;
@@ -134,12 +204,22 @@ void writer (int pointer){
 	else {
 		uint8_t writechar[2] = {0x40, calc[pointer]};
 		I2CSend(writechar, 2);
+		Writercheck(pointer);
 	}	
 	if (calc[pointer] == 0xBD) {
-		count=0;while(count!=1000000){count+=1;}
-		I2CScreenClear();
+		count=0;while(count!=5000000){count+=1;}
+		I2CScreenClear();		
+		char resultArr[get_int_len(result)];	
+		uint8_t resultDis[get_int_len(result)+1];
+		resultDis[0] = 0x40;	
+		snprintf(resultArr, get_int_len(result), "%x",result);
+		for(i=0; i<get_int_len(result); i++) {
+			resultDis[i+1] = resultArr[i];
+		}
+		I2CSend(resultDis, 2);
 	}
 }
+
 
 void RowCheck (uint8_t DataIn) {
 	switch(DataIn) {
