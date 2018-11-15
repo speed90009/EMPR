@@ -27,14 +27,14 @@ uint8_t setLow[1] = {0xF0};
 int colNo = 0;
 uint8_t calc[16] = {0xB1,0xB2,0xB3,0xAB,0xB4,0xB5,0xB6,0xAD,0xB7,0xB8,0xB9,0xAA,0xA0,0xB0,0xBD,0xAF};
 int rpointer = -1;
-char firstNo[14] = {};
-char secondNo[14] = {};
+char firstNo[10];
+char secondNo[10];
 uint8_t buffer = 0;
 char usedFunc = '0';
 int noPointer = 0;
 int i = 0;
 int result = 0;
-int resultlen = 0;
+int number = 0;
 
 void serial_init(void)
 {
@@ -59,6 +59,36 @@ void serial_init(void)
 	PINSEL_ConfigPin(&PinCfg);
 	GPIO_SetDir(0,0x00800000,0);
 	GPIO_IntCmd(0,0x00800000,1);
+
+
+	//UART1
+	UART_CFG_Type UARTConfigStruct;
+	UART_FIFO_CFG_Type UARTFIFOConfigStruct;
+	PinCfg.Funcnum = 1;
+	PinCfg.OpenDrain = 0;
+	PinCfg.Pinmode = 0;
+
+	PinCfg.Portnum = 0;
+	PinCfg.Pinnum = 2;
+	PINSEL_ConfigPin(&PinCfg);
+	PinCfg.Pinnum = 3;
+	PINSEL_ConfigPin(&PinCfg);
+	
+	UART_ConfigStructInit(&UARTConfigStruct);
+	UART_FIFOConfigStructInit(&UARTFIFOConfigStruct);
+	UART_Init((LPC_UART_TypeDef *)LPC_UART0, &UARTConfigStruct);
+    	UART_FIFOConfig((LPC_UART_TypeDef *)LPC_UART0, &UARTFIFOConfigStruct);
+	UART_TxCmd((LPC_UART_TypeDef *)LPC_UART0, ENABLE);
+}
+
+int read_usb_serial_none_blocking(char *buf,int length)
+{
+	return(UART_Receive((LPC_UART_TypeDef *)LPC_UART0, (uint8_t *)buf, length, NONE_BLOCKING));
+}
+
+int write_usb_serial_blocking(char *buf,int length)
+{
+	return(UART_Send((LPC_UART_TypeDef *)LPC_UART0,(uint8_t *)buf,length, BLOCKING));
 }
 
 
@@ -68,9 +98,10 @@ unsigned int int_to_int(unsigned int k) {
 
 int get_int_len (int value){
   int l=1;
-  while(value>=9){ l++; value/=10; }
+  while(value>9){ l++; value/=10; }
   return l;
 }
+
 
 void I2CTypeSetup (void) {
 	TransferCfg.sl_addr7bit = addinc;
@@ -134,6 +165,8 @@ void CalcInit (void) {
 }
 
 void task3 (void) {
+	memset(firstNo, '*', 1);	
+	memset(secondNo, '*', 1);
 	count=0;while(count!=10000000){count+=1;}
 	I2CScreenClear();
 	addinc = 0x21;
@@ -147,6 +180,7 @@ void I2CScreenRead (void) {
 	datastore[0] = 0x40;
 	datastore[1] = 0xB1;
 	I2CRecieve(datastore, 32);
+
 	I2CSend(datastore, 32);
 }
 */
@@ -159,39 +193,91 @@ void Writercheck (int pointer){
 		switch(calc[pointer]){
 			case 0xAA :
 				usedFunc = '*';
+				break;	
 			case 0xAB :
 				usedFunc = '+';
+				break;
 			case 0xAD :
 				usedFunc = '-';
+				break;
 			case 0xAF :
 				usedFunc = '/';
+				break;
 		}
 	}
-	if ((buffer != 0xAF) & (calc[pointer] != 0xBD)){
-		if(usedFunc == '0'){
-			firstNo[noPointer] = calc[pointer];
-			noPointer++;
+	else {
+		if (calc[pointer] == 0xBD){
+			count=0;while(count!=5000000){count+=1;}
+			I2CScreenClear();
+			int firstInt = atoi(firstNo);
+			int secondInt = atoi(secondNo);
+			sprintf(currentstatus, "string is %s\n\r", firstNo);	
+			write_usb_serial_blocking(currentstatus, 22);
+			sprintf(currentstatus, "number is %d\n\r", firstInt);	
+			write_usb_serial_blocking(currentstatus, 22);
+			sprintf(currentstatus, "string is %s\n\r", secondNo);	
+			write_usb_serial_blocking(currentstatus, 22);
+			sprintf(currentstatus, "number is %d\n\r", secondInt);	
+			write_usb_serial_blocking(currentstatus, 22);
+			switch(usedFunc){
+				case '*' :
+					result = firstInt * secondInt;
+					break;			
+				case '+' :
+					result = firstInt + secondInt;
+					break;
+				case '-' :
+					result = firstInt - secondInt;
+					break;
+				case '/' :
+					result = firstInt / secondInt;
+					break;
+			}
+			sprintf(currentstatus, "resultnum is %d\n\r", result);	
+			write_usb_serial_blocking(currentstatus, 22);
 		}
-		else{
-			secondNo[noPointer] = calc[pointer];
-			noPointer++;
-		}
-	}
-
-	if (calc[pointer] == 0xBD){
-		count=0;while(count!=5000000){count+=1;}
-		I2CScreenClear();
-		int firstInt = atoi(firstNo);
-		int secondInt = atoi(secondNo);
-		switch(usedFunc){
-			case '*' :
-				result = firstInt * secondInt;
-			case '+' :
-				result = firstInt + secondInt;
-			case '-' :
-				result = firstInt - secondInt;
-			case '/' :
-				result = firstInt / secondInt;
+		else {
+			switch (calc[pointer]) {
+				case 0xB0 :
+					number = '0';
+					break;
+				case 0xB1 :
+					number = '1';
+					break;
+				case 0xB2 :
+					number = '2';
+					break;
+				case 0xB3 :
+					number = '3';
+					break;
+				case 0xB4 :
+					number = '4';
+					break;
+				case 0xB5 :
+					number = '5';
+					break;
+				case 0xB6 :
+					number = '6';
+					break;
+				case 0xB7 :
+					number = '7';
+					break;
+				case 0xB8 :
+					number = '8';
+					break;
+				case 0xB9 :
+					number = '9';
+					break;
+				
+			}
+			if(usedFunc == '0'){	
+				firstNo[noPointer] = number;
+				noPointer++;
+			}
+			else{
+				secondNo[noPointer] = number;
+				noPointer++;
+			}
 		}
 	}
 }
@@ -200,6 +286,13 @@ void writer (int pointer){
 	addinc = 0x3B;
 	if (calc[pointer] == 0xA0) {
 		I2CScreenClear();
+		usedFunc = '0';
+		number = 0;
+		buffer = 0;
+		result = 0;
+		noPointer = 0;
+		memset(firstNo, '*', 10);
+		memset(secondNo, '*', 10);
 	}
 	else {
 		uint8_t writechar[2] = {0x40, calc[pointer]};
@@ -208,15 +301,50 @@ void writer (int pointer){
 	}	
 	if (calc[pointer] == 0xBD) {
 		count=0;while(count!=5000000){count+=1;}
-		I2CScreenClear();		
-		char resultArr[get_int_len(result)];	
-		uint8_t resultDis[get_int_len(result)+1];
-		resultDis[0] = 0x40;	
-		snprintf(resultArr, get_int_len(result), "%x",result);
-		for(i=0; i<get_int_len(result); i++) {
-			resultDis[i+1] = resultArr[i];
+		if (result == 30) {										
+			GPIO_SetDir(1,0x00B40000,1);
+			GPIO_SetValue(1,0x00B40000);
+		}		
+		char resultArr[11];
+		sprintf(resultArr, "%d", result);	
+		uint8_t resultDis[12];
+		resultDis[0] = 0x40;
+		for(i=0; i<10; i++) {
+			switch (resultArr[i]) {
+				case '0' :
+					resultDis[i+1] = 0xB0;
+					break;
+				case '1' :
+					resultDis[i+1] = 0xB1;
+					break;
+				case '2' :
+					resultDis[i+1] = 0xB2;
+					break;
+				case '3' :
+					resultDis[i+1] = 0xB3;
+					break;
+				case '4' :
+					resultDis[i+1] = 0xB4;
+					break;
+				case '5' :
+					resultDis[i+1] = 0xB5;
+					break;
+				case '6' :
+					resultDis[i+1] = 0xB6;
+					break;
+				case '7' :
+					resultDis[i+1] = 0xB7;
+					break;
+				case '8' :
+					resultDis[i+1] = 0xB8;
+					break;
+				case '9' :
+					resultDis[i+1] = 0xB9;
+					break;
+				
+			}
 		}
-		I2CSend(resultDis, 2);
+		I2CSend(resultDis, get_int_len(result)+1);
 	}
 }
 
@@ -309,3 +437,4 @@ int main (void) {
 	while(1) {
 	}
 }
+
