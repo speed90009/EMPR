@@ -20,6 +20,9 @@ PWM_CAPTURECFG_Type PWMCAPCfg;
 int count = 0;
 int counter = 0;
 double val, angle;
+int data3;
+int data3max;
+char datadisp[50];
 
 void serial_init(void)
 {
@@ -116,25 +119,66 @@ void DMA_IRQHandler(void){
 void Task1(void){
 	uint16_t test;
 	int count = 1;
-	char data[50];
+	char data1[50];
 	while(count!=100){count+=1;}
 	int i = 0;
 	while(i < 200)
 	{
 		test = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
 		test = test << 3;
-		sprintf(data, "%16d", test);
+		sprintf(data1, "%16d", test);
 		while(count!=100){count+=1;}
-		write_usb_serial_blocking(data, 16);
+		write_usb_serial_blocking(data1, 16);
 		write_usb_serial_blocking("\n\r", 4);
 	}
 }
+
+void Task3(void){
+	uint16_t test;
+	int count = 1;
+	while(count!=100){count+=1;}
+	int counterDac = 0;
+	while(1)
+	{	
+		test = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0) >> 2;
+		DAC_UpdateValue(LPC_DAC, test);
+	}
+}
+
+		/*
+		test = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
+		data3 = test << 3;
+		//data3 += 512;
+		data3max = data3 % 512;
+		sprintf(datadisp, "%16d\n\r", data3max);
+		while(count!=100){count+=1;}
+		//write_usb_serial_blocking(datadisp, 18);
+		data3 /= 4;
+		if (data3max == 0) {
+			data3 = 1;		
+		}
+		else {	
+			data3 /= data3max;
+		}
+		sprintf(datadisp, "%16d\n\r", data3);
+		while(count!=100){count+=1;}
+		//write_usb_serial_blocking(datadisp, 18);
+		data3 *= 10;
+		if (data3 <= 100000000) {
+			DAC_UpdateValue(LPC_DAC, data3);		
+		}
+		//else {
+		//	DAC_UpdateValue(LPC_DAC, 1024);
+		//}
+		counterDac = 0;
+		*/
+
 
 void main(void){
 	serial_init();
 	DAC();
 	ADC();
-	mp3_task2();
+	Task3();
 }
 
 
